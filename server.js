@@ -14,22 +14,25 @@ const port = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(express.static('public')); // Serve static files (like images, videos, etc.)
 
-// Function to call Hugging Face API to generate text for slides
-async function generateTextFromHuggingFace(topic) {
-  const apiUrl = 'https://api-inference.huggingface.co/models/gpt2'; // Replace with your model's API URL
+// Function to call OpenAI API to generate text for slides
+async function generateTextFromOpenAI(topic) {
+  const apiUrl = 'https://api.openai.com/v1/completions';
   const headers = {
-    'Authorization': `Bearer ${process.env.HUGGING_FACE_API_KEY}`,
+    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  const data = {
+    model: 'text-davinci-003', // or another model like gpt-3.5-turbo
+    prompt: `Create a detailed explanation on the topic: ${topic}`,
+    max_tokens: 150, // Adjust the token limit based on your needs
   };
 
   try {
-    const response = await axios.post(apiUrl, {
-      inputs: topic,
-    }, { headers });
-
-    console.log("Generated text:", response.data);
-    return response.data.generated_text; // Assuming the API returns text in 'generated_text' field
+    const response = await axios.post(apiUrl, data, { headers });
+    return response.data.choices[0].text.trim();
   } catch (error) {
-    console.error("Error while calling Hugging Face API:", error);
+    console.error("Error while calling OpenAI API:", error);
     throw error;
   }
 }
@@ -48,6 +51,28 @@ async function generateImage(text, imagePath) {
     .toBuffer();
 
   await fs.promises.writeFile(imagePath, imageBuffer);
+}
+
+// Function to generate audio from text (using ResponsiveVoice API or other)
+async function generateAudio(text, audioPath) {
+  const { exec } = require('child_process');
+  const googleTTS = require('google-tts-api');
+
+  const url = googleTTS.getAudioUrl(text, {
+    lang: 'en',
+    slow: false,
+    host: 'https://translate.google.com',
+  });
+
+  const audioStream = await axios.get(url, { responseType: 'stream' });
+
+  const writeStream = fs.createWriteStream(audioPath);
+  audioStream.data.pipe(writeStream);
+
+  return new Promise((resolve, reject) => {
+    writeStream.on('finish', resolve);
+    writeStream.on('error', reject);
+  });
 }
 
 // Function to generate the final video from images and audio
@@ -76,8 +101,8 @@ app.post("/generate-video", async (req, res) => {
     const images = [];
     const audioFiles = [];
 
-    // Call Hugging Face API to generate content for the slides
-    const generatedText = await generateTextFromHuggingFace(topic);
+    // Call OpenAI API to generate content for the slides
+    const generatedText = await generateTextFromOpenAI(topic);
     console.log("Generated text:", generatedText); // Debug log
     
     for (let i = 0; i < 5; i++) {
@@ -86,7 +111,7 @@ app.post("/generate-video", async (req, res) => {
       const audioFile = `public/audio_${i}.mp3`;
 
       await generateImage(slideText, imageFile);
-      // Use your custom audio generation logic here if needed
+      await generateAudio(slideText, audioFile);
 
       images.push(imageFile);
       audioFiles.push(audioFile);
@@ -96,7 +121,7 @@ app.post("/generate-video", async (req, res) => {
 
     generateVideo(images, audioFiles, outputVideo);
 
-    res.json({ videoUrl: `/video_${Date.now()}.mp4`, generatedText });
+    res.json({ videoUrl: `/video_${Date.now()}.mp4` });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error generating video" });
@@ -112,3 +137,4 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
