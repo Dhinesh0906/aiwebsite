@@ -1,4 +1,5 @@
-require('dotenv').config();
+require('dotenv').config({ path: './config.env' });
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -49,29 +50,6 @@ async function generateImage(text, imagePath) {
   await fs.promises.writeFile(imagePath, imageBuffer);
 }
 
-// Function to generate audio from text (using Google TTS or other TTS API)
-async function generateAudio(text, audioPath) {
-  // For example, use the Google TTS API to generate audio and save to file
-  const { exec } = require('child_process');
-  const googleTTS = require('google-tts-api');
-
-  const url = googleTTS.getAudioUrl(text, {
-    lang: 'en',
-    slow: false,
-    host: 'https://translate.google.com',
-  });
-
-  const audioStream = await axios.get(url, { responseType: 'stream' });
-
-  const writeStream = fs.createWriteStream(audioPath);
-  audioStream.data.pipe(writeStream);
-
-  return new Promise((resolve, reject) => {
-    writeStream.on('finish', resolve);
-    writeStream.on('error', reject);
-  });
-}
-
 // Function to generate the final video from images and audio
 function generateVideo(images, audioFiles, outputVideo) {
   fluentFFMPEG()
@@ -108,7 +86,7 @@ app.post("/generate-video", async (req, res) => {
       const audioFile = `public/audio_${i}.mp3`;
 
       await generateImage(slideText, imageFile);
-      await generateAudio(slideText, audioFile);
+      // Use your custom audio generation logic here if needed
 
       images.push(imageFile);
       audioFiles.push(audioFile);
@@ -118,7 +96,7 @@ app.post("/generate-video", async (req, res) => {
 
     generateVideo(images, audioFiles, outputVideo);
 
-    res.json({ videoUrl: `/video_${Date.now()}.mp4` });
+    res.json({ videoUrl: `/video_${Date.now()}.mp4`, generatedText });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error generating video" });
