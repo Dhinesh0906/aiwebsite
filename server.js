@@ -25,20 +25,21 @@ app.get("/", (req, res) => {
 // API route to generate video based on the topic
 app.post("/generate-video", async (req, res) => {
   const { topic, duration } = req.body;
-
   console.log("Received topic:", topic, "Duration:", duration); // Debug log
 
   try {
     const images = [];
     const audioFiles = [];
 
-    // Call Hugging Face API to generate content for the slides
+    // Log this step
+    console.log("Calling Hugging Face API...");
     const generatedText = await generateTextFromHuggingFace(topic);
     console.log("Generated text:", generatedText); // Debug log
     
-    // Generate images and audio files
+    // Further logging
     for (let i = 0; i < 5; i++) {
       const slideText = `${generatedText} - Slide ${i + 1}: ${topic}`;
+      console.log(`Generating image and audio for Slide ${i + 1}`);  // Debug log
       const imageFile = `public/image_${i}.png`;
       const audioFile = `public/audio_${i}.mp3`;
 
@@ -49,18 +50,18 @@ app.post("/generate-video", async (req, res) => {
       audioFiles.push(audioFile);
     }
 
+    console.log("Generating final video...");
     const outputVideo = `public/video_${Date.now()}.mp4`;
 
-    // Generate video from images and audio
     generateVideo(images, audioFiles, outputVideo);
 
-    // Send back the video URL to the frontend
     res.json({ videoUrl: `/video_${Date.now()}.mp4` });
   } catch (error) {
-    console.error(error);
+    console.error("Error generating video:", error);  // Error log
     res.status(500).json({ error: "Error generating video" });
   }
 });
+
 
 // Function to generate text using Hugging Face API
 const generateTextFromHuggingFace = async (topic) => {
