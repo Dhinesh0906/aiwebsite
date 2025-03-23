@@ -1,45 +1,109 @@
 require('dotenv').config();
-
-const express = require("express");
-const bodyParser = require("body-parser");
-const path = require("path");
-const axios = require("axios");
-const fs = require("fs");
-const ffmpeg = require("fluent-ffmpeg");
-
-const sharp = require("sharp");
-
+const express = require('express');
+const bodyParser = require('body-parser');
+const axios = require('axios');
+const fluentFFMPEG = require('fluent-ffmpeg');
+const sharp = require('sharp');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-// Middleware for parsing JSON
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static('public')); // Serve static files (like images, videos, etc.)
 
-// Frontend HTML
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+// Function to call Hugging Face API to generate text for slides
+async function generateTextFromHuggingFace(topic) {
+  const apiUrl = 'https://api-inference.huggingface.co/models/gpt2'; // Replace with your model's API URL
+  const headers = {
+    'Authorization': `Bearer ${process.env.HUGGING_FACE_API_KEY}`,
+  };
 
-// API route to generate video based on the topic
+  try {
+    const response = await axios.post(apiUrl, {
+      inputs: topic,
+    }, { headers });
+
+    console.log("Generated text:", response.data);
+    return response.data.generated_text; // Assuming the API returns text in 'generated_text' field
+  } catch (error) {
+    console.error("Error while calling Hugging Face API:", error);
+    throw error;
+  }
+}
+
+// Function to generate image from text (using sharp or any other tool)
+async function generateImage(text, imagePath) {
+  const imageBuffer = await sharp({
+    create: {
+      width: 800,
+      height: 600,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 }
+    }
+  })
+    .text(text, 10, 10, { size: 30, font: 'Arial' }) // Customize how text is added to the image
+    .toBuffer();
+
+  await fs.promises.writeFile(imagePath, imageBuffer);
+}
+
+// Function to generate audio from text (using Google TTS or other TTS API)
+async function generateAudio(text, audioPath) {
+  // For example, use the Google TTS API to generate audio and save to file
+  const { exec } = require('child_process');
+  const googleTTS = require('google-tts-api');
+
+  const url = googleTTS.getAudioUrl(text, {
+    lang: 'en',
+    slow: false,
+    host: 'https://translate.google.com',
+  });
+
+  const audioStream = await axios.get(url, { responseType: 'stream' });
+
+  const writeStream = fs.createWriteStream(audioPath);
+  audioStream.data.pipe(writeStream);
+
+  return new Promise((resolve, reject) => {
+    writeStream.on('finish', resolve);
+    writeStream.on('error', reject);
+  });
+}
+
+// Function to generate the final video from images and audio
+function generateVideo(images, audioFiles, outputVideo) {
+  fluentFFMPEG()
+    .input('concat:' + images.join('|'))
+    .input('concat:' + audioFiles.join('|'))
+    .outputOptions('-c:v libx264', '-c:a aac')
+    .output(outputVideo)
+    .on('end', () => {
+      console.log('Video creation finished!');
+    })
+    .on('error', (err) => {
+      console.error('Error during video creation:', err);
+    })
+    .run();
+}
+
+// API route to generate video based on the topic and duration
 app.post("/generate-video", async (req, res) => {
   const { topic, duration } = req.body;
+
   console.log("Received topic:", topic, "Duration:", duration); // Debug log
 
   try {
     const images = [];
     const audioFiles = [];
 
-    // Log this step
-    console.log("Calling Hugging Face API...");
+    // Call Hugging Face API to generate content for the slides
     const generatedText = await generateTextFromHuggingFace(topic);
     console.log("Generated text:", generatedText); // Debug log
     
-    // Further logging
     for (let i = 0; i < 5; i++) {
       const slideText = `${generatedText} - Slide ${i + 1}: ${topic}`;
-      console.log(`Generating image and audio for Slide ${i + 1}`);  // Debug log
       const imageFile = `public/image_${i}.png`;
       const audioFile = `public/audio_${i}.mp3`;
 
@@ -50,105 +114,23 @@ app.post("/generate-video", async (req, res) => {
       audioFiles.push(audioFile);
     }
 
-    console.log("Generating final video...");
     const outputVideo = `public/video_${Date.now()}.mp4`;
 
     generateVideo(images, audioFiles, outputVideo);
 
     res.json({ videoUrl: `/video_${Date.now()}.mp4` });
   } catch (error) {
-    console.error("Error generating video:", error);  // Error log
+    console.error(error);
     res.status(500).json({ error: "Error generating video" });
   }
 });
 
-
-// Function to generate text using Hugging Face API
-const generateTextFromHuggingFace = async (topic) => {
-  const apiKey = api.env.HUGGING_FACE_API_KEY;  
-
-  const model = "gpt-neo-2.7B"; // You can choose the model you want
-
-  try {
-    const response = await axios.post(
-      `https://api-inference.huggingface.co/models/${model}`,
-      {
-        inputs: `Generate structured content for the topic: ${topic}`,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      }
-    );
-
-    // Extract and return the generated text for use in slides
-    return response.data[0].generated_text;
-  } catch (error) {
-    console.error("Error generating text from Hugging Face:", error);
-    throw new Error("Failed to generate content from Hugging Face");
-  }
-};
-
-// Function to generate images with text
-const generateImage = (text, filename) => {
-  return sharp({
-    create: {
-      width: 800,
-      height: 600,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  })
-    .text(text, 20, 50)
-    .toFile(filename);
-};
-
-// Function to generate audio using Google TTS or other TTS service
-const generateAudio = (text, filename) => {
-  const url = googleTTS.getAudioUrl(text, {
-    lang: "en",
-    slow: false,
-    host: "https://translate.google.com",
-  });
-
-  return axios
-    .get(url, { responseType: "stream" })
-    .then((response) => {
-      const writer = fs.createWriteStream(filename);
-      response.data.pipe(writer);
-      return new Promise((resolve, reject) => {
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
-    });
-};
-
-// Function to generate video from images and audio
-const generateVideo = (imageFiles, audioFiles, outputVideo) => {
-  const ffmpegCommand = ffmpeg();
-
-  // Add images to video
-  imageFiles.forEach((image) => {
-    ffmpegCommand.input(image);
-  });
-
-  // Add audio to video
-  ffmpegCommand.input(audioFiles[0]); // Assuming only one audio file
-
-  ffmpegCommand
-    .output(outputVideo)
-    .outputOptions("-vcodec libx264", "-acodec aac", "-preset fast", "-crf 23")
-    .on("end", () => {
-      console.log("Video generation completed!");
-    })
-    .on("error", (err) => {
-      console.error("Error generating video:", err);
-    })
-    .run(); // <-- This is where you might have missed a closing parenthesis
-};
+// Root route for the frontend to interact
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`Server is running on port ${port}`);
 });
