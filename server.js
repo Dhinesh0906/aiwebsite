@@ -1,11 +1,14 @@
+require('dotenv').config();
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const path = require("path");
 const axios = require("axios");
 const fs = require("fs");
 const ffmpeg = require("fluent-ffmpeg");
-const googleTTS = require("google-tts-api");
+
 const sharp = require("sharp");
+
 
 const app = express();
 const port = 3000;
@@ -61,7 +64,7 @@ app.post("/generate-video", async (req, res) => {
 
 // Function to generate text using Hugging Face API
 const generateTextFromHuggingFace = async (topic) => {
-  const apiKey = "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"; 
+  const apiKey = process.env.HUGGING_FACE_API_KEY;  
 
   const model = "gpt-neo-2.7B"; // You can choose the model you want
 
