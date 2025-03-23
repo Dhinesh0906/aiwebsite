@@ -65,7 +65,7 @@ app.post("/generate-video", async (req, res) => {
 
 // Function to generate text using Hugging Face API
 const generateTextFromHuggingFace = async (topic) => {
-  const apiKey = process.env.HUGGING_FACE_API_KEY;  
+  const apiKey = api.env.HUGGING_FACE_API_KEY;  
 
   const model = "gpt-neo-2.7B"; // You can choose the model you want
 
