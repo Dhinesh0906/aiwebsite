@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Video Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: auto;
+    }
+    input, button {
+      margin: 10px 0;
+      padding: 10px;
+      width: 100%;
+      font-size: 16px;
+    }
+    #video-link {
+      margin-top: 20px;
+    }
+  </style>
+  <!-- Include ResponsiveVoice API script -->
+  <script src="https://code.responsivevoice.org/responsivevoice.js?key=TtVJgDHI"></script>
+</head>
+<body>
+  <h1>Generate AI Video</h1>
+  <form id="video-form">
+    <label for="topic">Topic:</label>
+    <input type="text" id="topic" required placeholder="Enter topic">
+    <label for="duration">Video Duration (in seconds):</label>
+    <input type="number" id="duration" required placeholder="Enter duration">
+    <button type="submit">Generate Video</button>
+  </form>
+  
+  <div id="video-link"></div>
+
+  <script>
+    // Listen for form submission
+    document.getElementById("video-form").addEventListener("submit", async (event) => {
+      event.preventDefault();  // Prevent default form submission
+
+      const topic = document.getElementById("topic").value;
+      const duration = document.getElementById("duration").value;
+
+      console.log("Sending request to backend with topic:", topic, "and duration:", duration); // Debug log
+
+      // Send the request to backend server
+      try {
+        const response = await fetch("http://localhost:3000/generate-video", {  // Use full URL if server runs on a different port
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ topic, duration }),  // Send the topic and duration as JSON
+        });
+
+        const data = await response.json();
+
+        if (data.videoUrl) {
+          // Show the video link when the video is generated successfully
+          document.getElementById("video-link").innerHTML = `
+            <h3>Video Generated!</h3>
+            <video controls>
+              <source src="${data.videoUrl}" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
+          `;
+
+          // Trigger text-to-speech using ResponsiveVoice API
+          responsiveVoice.speak("Your video has been generated successfully. Please check the link below.");
+        } else {
+          document.getElementById("video-link").innerHTML = "<p>Error generating video. Please try again.</p>";
+        }
+      } catch (error) {
+        console.error("Error:", error);  // Log any errors
+        document.getElementById("video-link").innerHTML = "<p>Error connecting to the server. Please try again later.</p>";
+      }
+    });
+  </script>
+</body>
+</html>
+
